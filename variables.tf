@@ -53,6 +53,3 @@ variable "db_parameter_group_name" {
   type    = string
   default = "default.mysql8.0"
 }
-
-
-

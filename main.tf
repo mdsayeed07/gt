@@ -15,8 +15,9 @@ resource "aws_vpc" "myvpc" {
 ## Create Public Subnets
 
 resource "aws_subnet" "PublicSubnet01" {
-  vpc_id     = aws_vpc.myvpc.id
-  cidr_block = "10.0.0.0/24"
+  vpc_id            = aws_vpc.myvpc.id
+  cidr_block        = "10.0.0.0/24"
+  availability_zone = "us-east-1a"
 
   tags = {
     Name = "aws-ue1a-dev-tfgt-pub01"
@@ -25,8 +26,9 @@ resource "aws_subnet" "PublicSubnet01" {
 }
 
 resource "aws_subnet" "PublicSubnet02" {
-  vpc_id     = aws_vpc.myvpc.id
-  cidr_block = "10.0.1.0/24"
+  vpc_id            = aws_vpc.myvpc.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "us-east-1b"
 
   tags = {
     Name = "aws-ue1b-dev-tfgt-pub02"
@@ -38,8 +40,9 @@ resource "aws_subnet" "PublicSubnet02" {
 ## Create Private Subnet
 
 resource "aws_subnet" "PrivateSubnet01" {
-  vpc_id     = aws_vpc.myvpc.id
-  cidr_block = "10.0.10.0/24"
+  vpc_id            = aws_vpc.myvpc.id
+  cidr_block        = "10.0.10.0/24"
+  availability_zone = "us-east-1a"
 
   tags = {
     Name = "aws-ue1a-dev-tfgt-pvt01"
@@ -48,8 +51,9 @@ resource "aws_subnet" "PrivateSubnet01" {
 }
 
 resource "aws_subnet" "PrivateSubnet02" {
-  vpc_id     = aws_vpc.myvpc.id
-  cidr_block = "10.0.11.0/24"
+  vpc_id            = aws_vpc.myvpc.id
+  cidr_block        = "10.0.11.0/24"
+  availability_zone = "us-east-1b"
 
   tags = {
     Name = "aws-ue1b-dev-tfgt-pvt02"
@@ -208,7 +212,7 @@ resource "aws_lb" "app_alb" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
-  subnets            = [aws_subnet.PublicSubnet01.id, aws_subnet.PrivateSubnet01.id, aws_subnet.PrivateSubnet02.id]
+  subnets            = [aws_subnet.PublicSubnet01.id, aws_subnet.PrivateSubnet02.id]
 
   tags = {
     Name = "app-alb"
@@ -267,6 +271,12 @@ resource "aws_security_group" "ec2_sg" {
 }
 
 
+## Encode User Data
+
+data "local_file" "user_data" {
+  filename = "./user-data.sh"
+}
+
 ## Create Launch Template
 
 resource "aws_launch_template" "app_launch_template" {
@@ -275,7 +285,7 @@ resource "aws_launch_template" "app_launch_template" {
   instance_type          = var.size
   key_name               = var.key
   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
-  user_data              = file("./user-data.sh")
+  user_data              = base64encode(data.local_file.user_data.content)
 
   tag_specifications {
     resource_type = "instance"
@@ -403,10 +413,11 @@ resource "aws_db_instance" "mysql_rds" {
 ## Create SG for Bastion ec2
 
 resource "aws_security_group" "bastion_ec2_sg" {
+  vpc_id = aws_vpc.myvpc.id
 
   ingress {
-    from_port   = 22
-    to_port     = 22
+    from_port   = 3389
+    to_port     = 3389
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -424,23 +435,27 @@ resource "aws_security_group" "bastion_ec2_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+    Name = "bastion-ec2-sg"
+    Env  = "dev"
+  }
 }
 
 
 ## Create bastion ec2
 
 resource "aws_instance" "bastion_ec2" {
-  ami                    = "ami-0069eac59d05ae12b"
-  instance_type          = var.size
-  key_name               = var.key
-  vpc_security_group_ids = [aws_security_group.bastion_ec2_sg.id]
-  subnet_id              = aws_subnet.PublicSubnet01.id
-  availability_zone      = "us-east-1a"
+  ami                         = "ami-0069eac59d05ae12b"
+  instance_type               = var.size
+  key_name                    = var.key
+  vpc_security_group_ids      = [aws_security_group.bastion_ec2_sg.id]
+  subnet_id                   = aws_subnet.PublicSubnet01.id
+  availability_zone           = "us-east-1a"
+  associate_public_ip_address = true
 
   tags = {
     Name = "Bastion-ec2"
     Env  = "dev"
   }
 }
-
-
